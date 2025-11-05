@@ -55,6 +55,7 @@ def create_users():
         first_name="Dan", last_name="Doughkneeder",
     )
 
+    Profile.objects.create(user=prof)
     Profile.objects.create(user=u1)
     Profile.objects.create(user=u2)
     Profile.objects.create(user=u3)
@@ -91,16 +92,17 @@ def parse_recipe(lines, author):
     step_ingredient_lines = []
     
     for line in lines[1:]:  # Skip title line
-        line = line.strip()
-        if not line:  # Whitespace only - ignore
+        if not line.strip():  # Whitespace only - ignore
             continue
         elif ':' in line and line.split(':', 1)[0].isalpha():
             key, value = line.split(":", 1)
             metadata[key.casefold()] = value.strip()
         elif line[0].isalpha():  # Description (starts with letter)
-            description += " " + line
+            description += " " + line.strip()
         elif line[0].isdigit() or line[0].isspace() or line.startswith('-') or line.startswith('–'):  # Steps/ingredients
-            step_ingredient_lines.append(line)
+            step_ingredient_lines.append(line.strip())
+        else:
+            raise Exception(line)
     
     # Create Recipe with author
     recipe = Recipe.objects.create(
@@ -123,10 +125,11 @@ def parse_recipe(lines, author):
             recipe.photo.save(metadata["photo"], File(f), save=True)
     
     # Default is_public based on title hash
-    #h = hashlib.md5(title.encode('utf-8')).hexdigest()
-    #num = int(h[8], 16)
-    #recipe.is_public = num >= 10
-    #recipe.save()
+    if any(f.name == 'is_public' for f in Recipe._meta.get_fields()):
+        h = hashlib.md5(title.encode('utf-8')).hexdigest()
+        num = int(h[8], 16)
+        recipe.is_public = num >= 10
+    recipe.save()
     
     # Parse steps and ingredients
     i = 0
@@ -156,12 +159,9 @@ def parse_recipe(lines, author):
                     break
                 ingr_text = ing_match.group(1).strip()
                 m = re.match(r'(?P<amount>\d*\.?\d+)\s+(?P<unit>\w+)\s+(?P<name>.*)', ingr_text)
-                if m:
-                    amount = float(m.group('amount'))
-                    unit = m.group('unit')
-                    name = m.group('name')
-                else:
-                    amount, unit, name = 0, '', ingr_text
+                amount = float(m.group('amount'))
+                unit = m.group('unit')
+                name = m.group('name')
                 Ingredient.objects.create(
                     amount=amount,
                     unit=unit,
@@ -249,4 +249,3 @@ If you've changed the model and want to rerun the script, run:
         for recipe in recipes:
             if not recipe.copied_from:
                 print_recipe_tree(recipe)
-
